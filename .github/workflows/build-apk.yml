@@ -30,7 +30,24 @@ jobs:
 
       - name: Flutter version
         run: flutter --version
-
+# install Android SDK platform 35 and build-tools
+      - name: Ensure Android SDK (platforms;android-35, build-tools) is installed
+        run: |
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          # Try the common sdkmanager paths that exist on GH hosted runners
+          if [ -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          elif [ -x "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" ]; then
+            SDKMANAGER="$ANDROID_SDK_ROOT/tools/bin/sdkmanager"
+          else
+            echo "sdkmanager not found in expected locations; listing /usr/local/lib/android/sdk"
+            ls -la /usr/local/lib/android/sdk || true
+            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          # Accept licenses and install platform 35 + build-tools
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+        env:
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       # This repo intentionally ships only lib/ + pubspec.yaml (see README).
       # We scaffold a throwaway Flutter project elsewhere purely to generate
       # the android/ platform folder, then copy just that folder in - this
