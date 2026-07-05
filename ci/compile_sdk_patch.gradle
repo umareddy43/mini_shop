@@ -1,0 +1,19 @@
+// Some Flutter plugins (notably `printing`) ship their own Android module
+// hardcoded to an older compileSdk (e.g. 30), which fails to build once any
+// dependency in the graph needs a newer one (a well-known upstream issue,
+// unrelated to this app's own code).
+//
+// This file is appended onto the generated android/build.gradle by the CI
+// workflow (see .github/workflows/build-apk.yml). It forces every native
+// Android library module in the project - our app plus every plugin - to
+// compile against SDK 35, overriding whatever each plugin hardcodes
+// internally.
+subprojects { sub ->
+    sub.afterEvaluate {
+        if (sub.hasProperty('android')) {
+            sub.android {
+                compileSdkVersion 35
+            }
+        }
+    }
+}
