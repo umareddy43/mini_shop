@@ -1,0 +1,74 @@
+name: Build Android APK
+
+# Runs automatically whenever you push to main, and also lets you trigger
+# it manually from the Actions tab ("Run workflow") without needing a push.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java (required by the Android Gradle build)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      # This repo intentionally ships only lib/ + pubspec.yaml (see README).
+      # We scaffold a throwaway Flutter project elsewhere purely to generate
+      # the android/ platform folder, then copy just that folder in - this
+      # never touches or overwrites our own lib/, pubspec.yaml, etc.
+      - name: Generate missing android/ platform folder
+        run: |
+          if [ ! -d "android" ]; then
+            flutter create --platforms=android --project-name grocery_shop_app /tmp/scaffold
+            cp -r /tmp/scaffold/android ./android
+          fi
+
+      # Some plugins (notably `printing`) ship their own Android module
+      # hardcoded to an older compileSdk, which fails once any dependency
+      # in the graph needs a newer one. ci/compile_sdk_patch.gradle forces
+      # every Android module to compile against a modern SDK level.
+      - name: Force a modern compileSdk on every Android module
+        run: cat ci/compile_sdk_patch.gradle >> android/build.gradle
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: grocery-shop-app-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+
+      # Only runs when you push a version tag (e.g. `git tag v1.0.0 && git
+      # push origin v1.0.0`). This creates a GitHub Release with the APK
+      # attached as a public asset - downloadable directly on a phone's
+      # browser with no GitHub login required, unlike the artifact above.
+      - name: Create GitHub Release with APK attached
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
